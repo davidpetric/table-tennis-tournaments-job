@@ -1,7 +1,7 @@
 import { chromium } from 'playwright';
 import { PrismaClient } from '@prisma/client';
 
-const prisma = new PrismaClient();
+// const prisma = new PrismaClient();
 
 async function sendDiscordNotification(webhook_url, tournament) {
     await fetch(webhook_url, {
@@ -21,7 +21,7 @@ async function notifySubscribers(tournament) {
 
 const scrape = async () => {
     try {
-        const browser = await chromium.launch({ headless: false, slowMo: 50 });
+        const browser = await chromium.launch({ headless: true });
 
         const context = await browser.newContext();
 
@@ -59,20 +59,20 @@ const scrape = async () => {
         console.log(data);
 
         for (const tournament of tournaments) {
-            // Check if tournament exists
-            const existingTournament = await prisma.tournament.findUnique({
-                where: { id: tournament.id }
-            });
+            // // Check if tournament exists
+            // const existingTournament = await prisma.tournament.findUnique({
+            //     where: { id: tournament.id }
+            // });
 
-            if (!existingTournament) {
-                // New tournament
-                await prisma.tournament.create({
-                    data: tournament
-                });
-                await notifySubscribers(tournament, true);
-            } else {
-                console.log("Turneul deja exista", existingTournament);
-            }
+            // if (!existingTournament) {
+            //     // New tournament
+            //     await prisma.tournament.create({
+            //         data: tournament
+            //     });
+            await notifySubscribers(tournament);
+            // } else {
+            //     console.log("Turneul deja exista", existingTournament);
+            // }
         }
 
         await browser.close();
@@ -80,7 +80,7 @@ const scrape = async () => {
         console.error(error);
 
     } finally {
-        await prisma.$disconnect();
+        //  await prisma.$disconnect();
     }
 }
 
