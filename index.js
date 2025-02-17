@@ -6,23 +6,29 @@ const prisma = new PrismaClient();
 async function sendDiscordNotification(webhook_url, tournament, isNew = true) {
     const embed = {
         title: tournament.tournamentName,
-        description: `${isNew ? 'New tournament' : 'Tournament updated'} in ${tournament.location}`,
+        description: `${isNew ? 'Turneu nou' : 'Turneu actualizat'} ${tournament.location}`,
         fields: [
             {
-                name: 'Date',
+                name: 'Data',
                 value: `${tournament.date} ${tournament.year}`,
                 inline: true
             },
             {
-                name: 'Venue',
+                name: 'Locatie',
                 value: tournament.venue,
                 inline: true
             },
             {
-                name: 'Categories',
-                value: Object.entries(tournament.categories)
-                    .map(([day, cats]) => `${day}: ${cats}`)
-                    .join('\n')
+                name: 'Categori',
+                value: tournament.categories
+            },
+            {
+                name: 'Zile',
+                value: tournament.days
+            },
+            {
+                name: 'ForumUrl',
+                value: tournament.forumUrl
             }
         ],
         url: tournament.forumUrl,
