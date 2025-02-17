@@ -3,62 +3,20 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-async function sendDiscordNotification(webhook_url, tournament, isNew = true) {
-    const embed = {
-        title: tournament.tournamentName,
-        description: `${isNew ? 'Turneu nou' : 'Turneu actualizat'} ${tournament.location}`,
-        fields: [
-            {
-                name: 'Data',
-                value: `${tournament.date} ${tournament.year}`,
-                inline: true
-            },
-            {
-                name: 'Locatie',
-                value: tournament.venue,
-                inline: true
-            },
-            {
-                name: 'Categori',
-                value: tournament.categories
-            },
-            {
-                name: 'Zile',
-                value: tournament.days
-            },
-            {
-                name: 'ForumUrl',
-                value: tournament.forumUrl
-            }
-        ],
-        url: tournament.forumUrl,
-        color: isNew ? 0x00ff00 : 0xffaa00
-    };
-
+async function sendDiscordNotification(webhook_url, tournament) {
     await fetch(webhook_url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ embeds: [embed] })
+        body: JSON.stringify({
+            content: `${tournament.forumUrl}`
+        })
     });
 }
 
-async function notifySubscribers(tournament, isNew = true) {
-    // Get all subscribers for this location
-    const subscribers = await prisma.locationSubscription.findMany({
-        where: {
-            location: tournament.location
-        },
-        include: {
-            user: true
-        }
-    });
-
-    // Send notification to each subscriber's webhook
-    for (const sub of subscribers) {
-        await sendDiscordNotification(sub.user.webhookUrl, tournament, isNew);
-    }
+async function notifySubscribers(tournament) {
+    await sendDiscordNotification(process.env.DISCORD_WEBHOOK_URL, tournament);
 }
 
 const scrape = async () => {
@@ -81,17 +39,8 @@ const scrape = async () => {
                 // Get tournament ID
                 const id = el.querySelector('.idt')?.textContent;
 
-                // Get date
-                const date = el.querySelector('.w2.bo b')?.textContent;
-                const year = el.querySelector('.w2.bo')?.textContent.match(/\d{4}/)?.[0];
-
                 // Get Google Maps link
                 const mapsLink = el.querySelector('.w2.bo a')?.href;
-
-                // Get location and venue details
-                const locationElement = el.querySelector('.t2l span');
-                const location = locationElement?.childNodes[0]?.textContent.trim();
-                const venue = locationElement?.querySelector('span')?.textContent.replace(/[\(\)]/g, '').trim();
 
                 // Get tournament name
                 const tournamentName = el.querySelector('.d2d')?.textContent.trim();
@@ -99,27 +48,8 @@ const scrape = async () => {
                 // Get forum URL
                 const forumLink = el.querySelector('.w3.bo a')?.href;
 
-                // Get tournament days schedule
-                const days = Array.from(el.querySelectorAll('.day'))
-                    .map(day => day.textContent.trim())
-                    .join(" / ");
-
-                // Get categories
-                const categories = Array.from(el.querySelectorAll('.w4.bo .sys h2'))
-                    .map(cat => cat.textContent.trim())
-                    .filter(cat => cat)
-                    .join(",");
-
                 return {
                     id,
-                    date,
-                    year,
-                    location,
-                    venue,
-                    tournamentName,
-                    days,
-                    categories,
-                    mapsLink,
                     forumUrl: forumLink
                 };
             });
@@ -141,15 +71,7 @@ const scrape = async () => {
                 });
                 await notifySubscribers(tournament, true);
             } else {
-                // Check for significant changes
-                const hasChanges = JSON.stringify(existingTournament) !== JSON.stringify(tournament);
-                if (hasChanges) {
-                    await prisma.tournament.update({
-                        where: { id: tournament.id },
-                        data: tournament
-                    });
-                    await notifySubscribers(tournament, false);
-                }
+                console.log("Turneul deja exista", existingTournament);
             }
         }
 

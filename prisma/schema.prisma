@@ -24,14 +24,6 @@ generator client {
 
 model Tournament {
   id            String      @id
-  date          String
-  year          String
-  location      String
-  venue         String
-  tournamentName String
-  mapsLink      String
   forumUrl      String
-  days          String
-  categories    String
   createdAt     DateTime    @default(now())
 }
