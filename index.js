@@ -32,6 +32,8 @@ const scrape = async () => {
 
         await page.goto("https://www.amatur.ro/tenisdemasa/tt");
 
+        await page.waitForLoadState('domcontentloaded', { timeout: 5000 });
+
         await page.waitForSelector('#load_data');
 
         const tournaments = await page.$$eval('#load_data .l1.lx', (elements) => {
