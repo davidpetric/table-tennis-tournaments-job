@@ -1,59 +1,68 @@
 import dotenv from 'dotenv';
 import { chromium } from 'playwright';
-import { PrismaClient } from '@prisma/client';
-
+import Database from 'better-sqlite3';
 dotenv.config();
 
-const prisma = new PrismaClient();
+// Initialize SQLite database with WAL mode for better concurrent access
+const db = new Database('tournaments.db', {
+    verbose: console.log
+});
+db.pragma('journal_mode = WAL');
 
-async function sendDiscordNotification(webhook_url, tournament) {
-    await fetch(webhook_url, {
+// Create tournaments table if it doesn't exist
+db.prepare(`
+  CREATE TABLE IF NOT EXISTS tournaments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    forumUrl TEXT UNIQUE,
+    tournamentName TEXT,
+    city TEXT,
+    venue TEXT,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+  )
+`).run();
+
+async function sendDiscordNotification(content) {
+    await fetch(process.env.DISCORD_WEBHOOK_URL, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-            content: `${tournament.forumUrl}`
+            content: content
         })
     });
 }
 
 async function notifySubscribers(tournament) {
-    await sendDiscordNotification(process.env.DISCORD_WEBHOOK_URL, tournament);
+    const content = `${tournament.forumUrl}`;
+
+    await sendDiscordNotification(content);
 }
 
-
 async function scrape() {
+    let runMessages = [];
+
     try {
         const browser = await chromium.launch({ headless: true });
-
         const context = await browser.newContext();
-
         const page = await context.newPage();
-
         const userAgent = await page.evaluate(() => navigator.userAgent);
         console.log('Current user agent:', userAgent);
 
         await page.goto("https://www.amatur.ro/tenisdemasa/tt");
-
         await page.waitForLoadState('domcontentloaded', { timeout: 5000 });
-
         await page.waitForSelector('#load_data');
 
         const tournaments = await page.$$eval('#load_data .l1.lx', (elements) => {
             return elements.map(el => {
                 // Get tournament ID
                 const id = el.querySelector('.idt')?.textContent;
-
                 // Get Google Maps link
                 const mapsLink = el.querySelector('.w2.bo a')?.href;
-
                 // Get tournament name
                 const tournamentName = el.querySelector('.d2d')?.textContent.trim();
-
                 // Get forum URL
                 const forumUrl = el.querySelector('.w3.bo a')?.href;
-
                 // Get location information
                 const locationElement = el.querySelector('.t2l');
                 let city = '';
@@ -62,7 +71,6 @@ async function scrape() {
                 if (locationElement) {
                     const locationText = locationElement.textContent.trim();
                     const match = locationText.match(/([^(]+)\s*\(([^)]+)\)/);
-
                     if (match) {
                         function removeDiacritics(str) {
                             return str.normalize('NFD')
@@ -76,13 +84,11 @@ async function scrape() {
                                 .replace(/[Șş]/g, 'S')
                                 .replace(/[Țţ]/g, 'T');
                         };
-
                         [, city, venue] = match;
                         city = removeDiacritics(city.trim());
                         venue = removeDiacritics(venue.trim());
                     }
                 }
-
                 return {
                     forumUrl,
                     tournamentName,
@@ -92,33 +98,38 @@ async function scrape() {
             });
         });
 
-        const data = JSON.stringify(tournaments, null, 2);
-        console.log(data);
+        // Prepare statements
+        const checkTournament = db.prepare('SELECT * FROM tournaments WHERE forumUrl = ?');
+
+        const insertTournament = db.prepare(`
+            INSERT INTO tournaments (forumUrl, tournamentName, city, venue)
+            VALUES (@forumUrl, @tournamentName, @city, @venue)
+        `);
 
         for (const tournament of tournaments) {
             // Check if tournament exists
-            const existingTournament = await prisma.tournament.findUnique({
-                where: { forumUrl: tournament.forumUrl }
-            });
+            const existingTournament = checkTournament.get(tournament.forumUrl);
 
             if (!existingTournament) {
                 // New tournament
-                await prisma.tournament.create({
-                    data: tournament
-                });
-
+                insertTournament.run(tournament);
                 await notifySubscribers(tournament);
             } else {
                 console.log("Turneul deja exista", existingTournament);
             }
         }
 
+        runMessages.push(`Run completed with success: date: ${new Date().toDateString()} -  time: ${new Date().toLocaleTimeString()} `)
+
         await browser.close();
+
     } catch (error) {
-        console.error(error);
+        runMessages.push(`Error occurred: ${error}`)
 
     } finally {
-        await prisma.$disconnect();
+        db.close();
+
+        await sendDiscordNotification(runMessages.join(", "));
     }
 }
 
