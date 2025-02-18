@@ -1,7 +1,10 @@
+import dotenv from 'dotenv';
 import { chromium } from 'playwright';
 import { PrismaClient } from '@prisma/client';
 
-// const prisma = new PrismaClient();
+dotenv.config();
+
+const prisma = new PrismaClient();
 
 async function sendDiscordNotification(webhook_url, tournament) {
     await fetch(webhook_url, {
@@ -19,7 +22,8 @@ async function notifySubscribers(tournament) {
     await sendDiscordNotification(process.env.DISCORD_WEBHOOK_URL, tournament);
 }
 
-const scrape = async () => {
+
+async function scrape() {
     try {
         const browser = await chromium.launch({ headless: true });
 
@@ -48,11 +52,42 @@ const scrape = async () => {
                 const tournamentName = el.querySelector('.d2d')?.textContent.trim();
 
                 // Get forum URL
-                const forumLink = el.querySelector('.w3.bo a')?.href;
+                const forumUrl = el.querySelector('.w3.bo a')?.href;
+
+                // Get location information
+                const locationElement = el.querySelector('.t2l');
+                let city = '';
+                let venue = '';
+
+                if (locationElement) {
+                    const locationText = locationElement.textContent.trim();
+                    const match = locationText.match(/([^(]+)\s*\(([^)]+)\)/);
+
+                    if (match) {
+                        function removeDiacritics(str) {
+                            return str.normalize('NFD')
+                                .replace(/[\u0300-\u036f]/g, '')
+                                .replace(/[ăâ]/g, 'a')
+                                .replace(/[îí]/g, 'i')
+                                .replace(/[șş]/g, 's')
+                                .replace(/[țţ]/g, 't')
+                                .replace(/[Ăâ]/g, 'A')
+                                .replace(/[Îí]/g, 'I')
+                                .replace(/[Șş]/g, 'S')
+                                .replace(/[Țţ]/g, 'T');
+                        };
+
+                        [, city, venue] = match;
+                        city = removeDiacritics(city.trim());
+                        venue = removeDiacritics(venue.trim());
+                    }
+                }
 
                 return {
-                    id,
-                    forumUrl: forumLink
+                    forumUrl,
+                    tournamentName,
+                    city,
+                    venue,
                 };
             });
         });
@@ -61,20 +96,21 @@ const scrape = async () => {
         console.log(data);
 
         for (const tournament of tournaments) {
-            // // Check if tournament exists
-            // const existingTournament = await prisma.tournament.findUnique({
-            //     where: { id: tournament.id }
-            // });
+            // Check if tournament exists
+            const existingTournament = await prisma.tournament.findUnique({
+                where: { forumUrl: tournament.forumUrl }
+            });
 
-            // if (!existingTournament) {
-            //     // New tournament
-            //     await prisma.tournament.create({
-            //         data: tournament
-            //     });
-            await notifySubscribers(tournament);
-            // } else {
-            //     console.log("Turneul deja exista", existingTournament);
-            // }
+            if (!existingTournament) {
+                // New tournament
+                await prisma.tournament.create({
+                    data: tournament
+                });
+
+                await notifySubscribers(tournament);
+            } else {
+                console.log("Turneul deja exista", existingTournament);
+            }
         }
 
         await browser.close();
@@ -82,7 +118,7 @@ const scrape = async () => {
         console.error(error);
 
     } finally {
-        //  await prisma.$disconnect();
+        await prisma.$disconnect();
     }
 }
 

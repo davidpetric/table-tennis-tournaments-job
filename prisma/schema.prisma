@@ -23,7 +23,10 @@ generator client {
 }
 
 model Tournament {
-  id            String      @id
-  forumUrl      String
-  createdAt     DateTime    @default(now())
+  forumUrl           String      @unique
+  tournamentName     String      @unique
+  city               String?
+  venue              String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @default(now())
 }
