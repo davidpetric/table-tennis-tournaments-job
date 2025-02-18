@@ -2,7 +2,7 @@ name: Daily Scheduled Run
 on:
   workflow_dispatch:
   schedule:
-    - cron: ${{ secrets.CRON_SCHEDULE }}
+    - cron: ${{ env.CRON_SCHEDULE }}
 jobs:
   daily-run:
     timeout-minutes: 5
