@@ -119,7 +119,7 @@ async function scrape() {
             }
         }
 
-        runMessages.push(`Run completed with success: date: ${new Date().toDateString()} -  time: ${new Date().toLocaleTimeString()} `)
+        runMessages.push(`Run completed with success: ${new Date().toISOString()}`)
 
         await browser.close();
 
