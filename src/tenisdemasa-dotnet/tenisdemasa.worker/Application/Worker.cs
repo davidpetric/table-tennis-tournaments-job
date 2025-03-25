@@ -1,10 +1,14 @@
 namespace TenisDeMasa.Worker.Application;
 
+using Microsoft.Extensions.Configuration;
+
 using TenisDeMasa.Worker.Application.Discord;
 using TenisDeMasa.Worker.Application.TenisDeMasaForumScrapper;
 
-public class Worker(ILogger<Worker> logger, IServiceProvider serviceProvider)
-    : IHostedService, IDisposable
+public class Worker(
+    ILogger<Worker> logger,
+    IServiceProvider serviceProvider,
+    IConfiguration configuration) : IHostedService, IDisposable
 {
     public async Task StartAsync(CancellationToken stoppingToken)
     {
@@ -71,7 +75,8 @@ public class Worker(ILogger<Worker> logger, IServiceProvider serviceProvider)
 
             try
             {
-                await Task.Delay(TimeSpan.FromMinutes(1), stoppingToken);
+                var delay = configuration.GetValue<int>("RunEveryMinutes");
+                await Task.Delay(TimeSpan.FromMinutes(delay), stoppingToken);
             }
             catch (OperationCanceledException)
             {
@@ -83,8 +88,6 @@ public class Worker(ILogger<Worker> logger, IServiceProvider serviceProvider)
     public Task StopAsync(CancellationToken stoppingToken)
     {
         logger.LogInformation("Timed Hosted Service is stopping.");
-
-
         return Task.CompletedTask;
     }
 
